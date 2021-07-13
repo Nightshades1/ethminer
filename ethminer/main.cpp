@@ -70,6 +70,14 @@ struct MiningChannel : public LogChannel
 #if ETH_DBUS
 #include <ethminer/DBusInt.h>
 #endif
+class GamingThrottling
+{
+public:
+    std::thread ThrottlingThread;
+    int GPU_MAX_PERCENT = 0;
+    int CPU_MIN_PERCENT = 0;
+private:
+};
 
 class MinerCLI
 {
@@ -89,8 +97,8 @@ public:
             &MinerCLI::cliDisplayInterval_elapsed, this, boost::asio::placeholders::error)));
 
         // Start io_service in it's own thread
-        m_io_thread = std::thread{boost::bind(&boost::asio::io_service::run, &g_io_service)};
-
+        m_io_thread = std::thread{ boost::bind(&boost::asio::io_service::run, &g_io_service) };
+        GamingThrottling throttle = GamingThrottling();
         // Io service is now live and running
         // All components using io_service should post to reference of g_io_service
         // and should not start/stop or even join threads (which heavily time consuming)
@@ -216,13 +224,14 @@ public:
         std::queue<string> warnings;
 
         CLI::App app("Ethminer - GPU Ethash miner");
+        GamingThrottling Throttle = GamingThrottling();
 
         bool bhelp = false;
+        bool Is_Silent = false;
         string shelpExt;
 
         app.set_help_flag();
         app.add_flag("-h,--help", bhelp, "Show help");
-
         app.add_set("-H,--help-ext", shelpExt,
             {
                 "con", "test",
@@ -370,10 +379,14 @@ public:
 
         app.add_option("--tstop", m_FarmSettings.tempStop, "", true)->check(CLI::Range(30, 100));
         app.add_option("--tstart", m_FarmSettings.tempStart, "", true)->check(CLI::Range(30, 100));
+        app.add_flag("--silent", Is_Silent, "");
+        app.add_option("--throttle-gpu", Throttle.GPU_MAX_PERCENT, "", false)->check(CLI::Range(1, 100));
+        app.add_option("--throttle-cpu", Throttle.CPU_MIN_PERCENT, "", false)->check(CLI::Range(1, 100));
 
 
         // Exception handling is held at higher level
         app.parse(argc, argv);
+        if (Is_Silent){ShowWindow(GetConsoleWindow(), SW_HIDE);}
         if (bhelp)
         {
             help();
@@ -403,8 +416,6 @@ public:
             warnings.push("Program flow won't be logged. Compile with -DDEVBUILD=ON");
 
 #endif
-
-
         if (cl_miner)
             m_minerType = MinerType::CL;
         else if (cuda_miner)
@@ -791,6 +802,9 @@ public:
 
              << "Common Options :" << endl
              << endl
+             << "    --silent            Hide the console window or the terminal if invoked with." << endl
+             << "    --throttle-gpu      INT[1 .. 100] MAX GPU Usage When Throttling" << endl
+             << "    --throttle-cpu      INT[1 .. 100] MIN CPU Usage Before Enabling GPU Throttling with --throttle-gpu" << endl
              << "    -h,--help           Displays this help text and exits" << endl
              << "    -H,--help-ext       TEXT {'con','test',"
 #if ETH_ETHASHCL
@@ -823,6 +837,7 @@ public:
 #endif
              << "                        'misc' Other miscellaneous options" << endl
              << "                        'env'  Using environment variables" << endl
+             << "                        'gaming'  Game GPU Throttling Options" << endl
              << "    -V,--version        Show program version and exits" << endl
              << endl;
     }
@@ -975,6 +990,7 @@ public:
                  << "    This set of options is valid for mining mode independently from" << endl
                  << "    OpenCL or CUDA or Mixed mining mode." << endl
                  << endl
+                 << "    --silent"
                  << "    --display-interval  INT[1 .. 1800] Default = 5" << endl
                  << "                        Statistic display interval in seconds" << endl
                  << "    --farm-recheck      INT[1 .. 99999] Default = 500" << endl
