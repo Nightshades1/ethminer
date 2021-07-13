@@ -837,7 +837,6 @@ public:
 #endif
              << "                        'misc' Other miscellaneous options" << endl
              << "                        'env'  Using environment variables" << endl
-             << "                        'gaming'  Game GPU Throttling Options" << endl
              << "    -V,--version        Show program version and exits" << endl
              << endl;
     }
